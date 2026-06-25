@@ -233,6 +233,21 @@ with st.sidebar:
         st.cache_data.clear()
         st.rerun()
 
+    st.divider()
+    st.header("🔍 할인가 체크")
+    if st.button("할인가 체크 실행", type="primary"):
+        with st.spinner("무신사 상품 크롤링 중..."):
+            import sys, os
+            sys.path.insert(0, str(DATA_DIR))
+            from check_discounts import run_check
+            stats = run_check()
+        st.success(
+            f"완료! 총 {stats['total']}개 | "
+            f"변경 {stats['changed']}건 | "
+            f"품절 {stats['soldout']}건 | "
+            f"실패 {stats['failed']}건"
+        )
+
 # 전체 필터 데이터
 if len(date_range) == 2:
     start, end = pd.Timestamp(date_range[0]), pd.Timestamp(date_range[1])
