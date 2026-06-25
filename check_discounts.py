@@ -7,29 +7,31 @@ def scrape_product(uid: str) -> dict:
     script = f"""
 new_tab("https://www.musinsa.com/products/{uid}")
 wait_for_load()
-import time; time.sleep(2)
+import time; time.sleep(3)
 result = js(\"\"\"
 (() => {{
-  // 품절 체크
-  const soldOut = document.querySelector('[class*="soldout"], [class*="sold-out"]');
-  const btnText = document.querySelector('[class*="purchase"] button, [class*="buy"] button');
-  if (soldOut || (btnText && btnText.disabled)) return {{"status": "품절"}};
+  // soldout check via button text (charCodes for no encoding issues)
+  const soldoutStr = String.fromCharCode(54408,51208);
+  const allBtns = document.querySelectorAll('button');
+  for (const btn of allBtns) {{
+    if (btn.textContent.trim() === soldoutStr) return {{"status": "soldout"}};
+  }}
 
-  // 할인율 추출
-  const rateEl = document.querySelector('[class*="discount-rate"], [class*="sale-rate"], [class*="discountRate"]');
+  // discount rate: Price__DiscountRate class
+  const rateEl = document.querySelector('[class*="Price__DiscountRate"]');
   if (rateEl) {{
-    const rate = rateEl.textContent.match(/\\d+/);
+    const rate = rateEl.textContent.match(/[0-9]+/);
     if (rate) return {{"status": "ok", "value": rate[0] + "%"}};
   }}
 
-  // 할인가 추출 (최종가)
-  const priceEl = document.querySelector('[class*="final-price"], [class*="sale-price"], [class*="finalPrice"]');
+  // final price: Price__CalculatedPrice class
+  const priceEl = document.querySelector('[class*="Price__CalculatedPrice"]');
   if (priceEl) {{
     const price = priceEl.textContent.replace(/[^0-9]/g, "");
-    if (price) return {{"status": "ok", "value": price + "원"}};
+    if (price) return {{"status": "ok", "value": price + "won"}};
   }}
 
-  return {{"status": "실패"}};
+  return {{"status": "fail"}};
 }})()
 \"\"\")
 print(result)
@@ -39,6 +41,7 @@ print(result)
             proc = subprocess.run(
                 ["browser-harness"],
                 input=script, capture_output=True, text=True, timeout=30,
+                encoding="utf-8", errors="replace",
                 env={**__import__("os").environ, "PATH": r"C:\Users\MADUP\.local\bin;" + __import__("os").environ.get("PATH", "")}
             )
             output = proc.stdout.strip()
