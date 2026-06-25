@@ -14,7 +14,7 @@ result = js(\"\"\"
   const soldoutStr = String.fromCharCode(54408,51208);
   const allBtns = document.querySelectorAll('button');
   for (const btn of allBtns) {{
-    if (btn.textContent.trim() === soldoutStr) return {{"status": "soldout"}};
+    if (btn.textContent.trim() === soldoutStr) return {{"status": "품절"}};
   }}
 
   // discount rate: Price__DiscountRate class
@@ -28,10 +28,10 @@ result = js(\"\"\"
   const priceEl = document.querySelector('[class*="Price__CalculatedPrice"]');
   if (priceEl) {{
     const price = priceEl.textContent.replace(/[^0-9]/g, "");
-    if (price) return {{"status": "ok", "value": price + "won"}};
+    if (price) return {{"status": "ok", "value": price + "원"}};
   }}
 
-  return {{"status": "fail"}};
+  return {{"status": "실패"}};
 }})()
 \"\"\")
 print(result)
