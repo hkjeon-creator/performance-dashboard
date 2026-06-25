@@ -38,20 +38,38 @@ def load_file(path):
     p = pathlib.Path(path)
     return pd.read_parquet(p) if p.suffix == ".parquet" else pd.read_csv(p)
 
-def load_data():
-    ch_files = sorted(
-        glob.glob(str(DATA_DIR / "data" / "channel" / "*.parquet")) or
-        glob.glob(str(DATA_DIR / "data" / "channel" / "*.csv"))
-    )
-    af_files = sorted(
-        glob.glob(str(DATA_DIR / "data" / "appsflyer" / "*.parquet")) or
-        glob.glob(str(DATA_DIR / "data" / "appsflyer" / "*.csv"))
-    )
-    if not ch_files or not af_files:
-        return None
+def read_uploaded(files):
+    frames = []
+    for f in files:
+        if f.name.endswith(".parquet"):
+            frames.append(pd.read_parquet(f))
+        else:
+            frames.append(pd.read_csv(f))
+    return pd.concat(frames, ignore_index=True) if frames else None
 
-    ch = pd.concat([load_file(f) for f in ch_files], ignore_index=True)
-    af = pd.concat([load_file(f) for f in af_files], ignore_index=True)
+def load_data(uploaded_ch=None, uploaded_af=None):
+    # 업로드 파일 우선, 없으면 로컬 폴더
+    if uploaded_ch:
+        ch = read_uploaded(uploaded_ch)
+    else:
+        ch_files = sorted(
+            glob.glob(str(DATA_DIR / "data" / "channel" / "*.parquet")) or
+            glob.glob(str(DATA_DIR / "data" / "channel" / "*.csv"))
+        )
+        if not ch_files:
+            return None
+        ch = pd.concat([load_file(f) for f in ch_files], ignore_index=True)
+
+    if uploaded_af:
+        af = read_uploaded(uploaded_af)
+    else:
+        af_files = sorted(
+            glob.glob(str(DATA_DIR / "data" / "appsflyer" / "*.parquet")) or
+            glob.glob(str(DATA_DIR / "data" / "appsflyer" / "*.csv"))
+        )
+        if not af_files:
+            return None
+        af = pd.concat([load_file(f) for f in af_files], ignore_index=True)
 
     ch = ch.rename(columns={"일": "날짜"})
     af = af.rename(columns={"일": "날짜", "미디어소스": "미디어소스_af"})
@@ -82,6 +100,14 @@ def load_data():
 @st.cache_data(ttl=300)
 def get_data():
     return load_data()
+
+@st.cache_data(ttl=3600)
+def get_uploaded_data(ch_key, af_key):
+    # 업로드 파일은 session_state에서 직접 읽음 (캐시 키만 사용)
+    return load_data(
+        uploaded_ch=st.session_state.get("uploaded_ch"),
+        uploaded_af=st.session_state.get("uploaded_af"),
+    )
 
 
 # ── 헬퍼 함수 ─────────────────────────────────────────────────────────────────
@@ -149,9 +175,15 @@ def chart_layout(fig, height=400):
 
 st.title("📊 광고 성과 대시보드")
 
-df = get_data()
+if st.session_state.get("uploaded_ch") or st.session_state.get("uploaded_af"):
+    ch_key = str([f.name for f in st.session_state.get("uploaded_ch", [])])
+    af_key = str([f.name for f in st.session_state.get("uploaded_af", [])])
+    df = get_uploaded_data(ch_key, af_key)
+else:
+    df = get_data()
+
 if df is None:
-    st.error("데이터 없음. `data/channel/` 과 `data/appsflyer/` 폴더에 parquet 파일을 넣어주세요.")
+    st.info("👈 왼쪽 사이드바에서 채널/앱스플라이어 데이터를 업로드하세요.")
     st.stop()
 
 date_min, date_max = df["날짜"].min(), df["날짜"].max()
@@ -161,6 +193,29 @@ yesterday = date_max
 # ── 사이드바 ──────────────────────────────────────────────────────────────────
 
 with st.sidebar:
+    st.header("📂 데이터 업로드")
+    up_ch = st.file_uploader(
+        "채널 데이터 (CSV/Parquet, 복수 가능)",
+        type=["csv", "parquet"], accept_multiple_files=True, key="upload_ch"
+    )
+    up_af = st.file_uploader(
+        "앱스플라이어 데이터 (CSV/Parquet, 복수 가능)",
+        type=["csv", "parquet"], accept_multiple_files=True, key="upload_af"
+    )
+    if up_ch:
+        st.session_state["uploaded_ch"] = up_ch
+    if up_af:
+        st.session_state["uploaded_af"] = up_af
+
+    using_upload = bool(st.session_state.get("uploaded_ch") or st.session_state.get("uploaded_af"))
+    if using_upload:
+        st.success("✅ 업로드 데이터 사용 중")
+        if st.button("🗑️ 업로드 초기화"):
+            st.session_state.pop("uploaded_ch", None)
+            st.session_state.pop("uploaded_af", None)
+            st.rerun()
+
+    st.divider()
     st.header("필터")
 
     compare_mode = st.radio("비교 기준 (Daily 탭)", ["전일 대비", "전주 동요일 대비"])
